@@ -201,12 +201,21 @@ def install_packages():
         time.sleep(5)
 
     if GPU_COUNT and (INSTANCE_TYPE == "compute"):
-        rpm = "cuda-repo-rhel7-9.2.148-1.x86_64.rpm"
-        subprocess.call("yum -y install kernel-devel-$(uname -r) kernel-headers-$(uname -r)", shell=True)
-        subprocess.call(shlex.split("wget http://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/" + rpm))
-        subprocess.call(shlex.split("sudo rpm -i " + rpm))
-        subprocess.call(shlex.split("sudo yum clean all"))
-        subprocess.call(shlex.split("sudo yum -y install cuda"))
+        subprocess.call("yum -y install kernel-devel-$(uname -r) kernel-headers-$(uname -r)",
+                        shell=True)
+
+        # run file install
+        run_file = "cuda_10.0.130_410.48_linux"
+        subprocess.call(shlex.split("wget --quiet https://developer.nvidia.com/compute/cuda/10.0/Prod/local_installers/" + run_file))
+        subprocess.call(shlex.split("sh " + run_file + " --silent --driver --toolkit"))
+
+        # rpm install
+#        rpm = "cuda-repo-rhel7-9.2.148-1.x86_64.rpm"
+#        subprocess.call(shlex.split("wget http://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/" + rpm))
+#        subprocess.call(shlex.split("sudo rpm -i " + rpm))
+#        subprocess.call(shlex.split("sudo yum clean all"))
+#        subprocess.call(shlex.split("sudo yum -y install cuda"))
+
         subprocess.call(shlex.split("nvidia-smi")) # Creates the device files
 
 #END install_packages()
