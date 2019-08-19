@@ -5,10 +5,18 @@ Platform](https://cloud.google.com), bursting out from an on-premise cluster to
 nodes in Google Cloud Platform and setting a multi-cluster/federated setup with
 a cluster that resides in Google Cloud Platform.
 
+Also, checkout the [Slurm on GCP code lab](https://codelabs.developers.google.com/codelabs/hpc-slurm-on-gcp/).
+
 The supplied scripts can be modified to work with your environment.
 
 SchedMD provides professional services to help you get up and running in the
 cloud environment. [SchedMD Commercial Support](https://www.schedmd.com/support.php)
+
+Issues and/or enhancement requests can be submitted to
+[SchedMD's Bugzilla](https://bugs.schedmd.com).
+
+For general feedback, please fill out the following
+[form](https://docs.google.com/forms/d/1STDQZOm96d4qhcWxL6wDsOBx9BsVPKidVUTOnqHNdcw).
 
 ## Stand-alone Cluster in Google Cloud Platform
 
@@ -16,7 +24,7 @@ The supplied scripts can be used to create a stand-alone cluster in Google Cloud
 Platform. The scripts setup the following scenario:
 
 * 1 - controller node
-* 1 - login node
+* N - login nodes
 * N - compute nodes with a configured number of nodes that can be dynamically
 created to match workload.
 
@@ -28,9 +36,10 @@ with the symlink /apps/slurm/current pointing to /apps/slurm/<slurm_version>.
 
 The login nodes mount /apps and /home from the controller node.
 
-To deploy, you must have a GCP account and have the GCP Cloud SDK installed.  
-See [Cloud Cloud SDK](https://cloud.google.com/sdk/downloads).
-
+To deploy, you must have a GCP account and either have the
+[GCP Cloud SDK](https://cloud.google.com/sdk/downloads)
+installed on your computer or use the GCP
+[Cloud Shell](https://cloud.google.com/shell/).
 
 Steps:
 1. Edit the `slurm-cluster.yaml` file and specify the required values
@@ -45,24 +54,69 @@ Steps:
    - name: slurm-cluster
      type: slurm.jinja
      properties:
-       cluster_name            : google1
+       cluster_name            : g1
        static_node_count       : 2
        max_node_count          : 10
-       zone                    : us-east1-b
-       region                  : us-east1
+
+       zone                    : us-central1-b
+       region                  : us-central1
        cidr                    : 10.10.0.0/16
+
+       # Optional network configuration fields
+       # READ slurm.jinja.schema for prerequisites
+       #vpc_net                 : < my-vpc >
+       #vpc_subnet              : < my-subnet >
+       #shared_vpc_host_proj    : < my-shared-vpc-project-name >
 
        controller_machine_type : n1-standard-2
        compute_machine_type    : n1-standard-2
-       login_machine_type      : n1-standard-1
+       login_machine_type      : n1-standard-2
+       #login_node_count        : 0
 
-       slurm_version           : 17.11.5
-       default_account         : default
-       default_users           : bob,joe
+       # Optional compute configuration fields
+       #cpu_platform               : Intel Skylake
+       #preemptible_bursting       : False
+       #external_compute_ips       : False
+       #private_google_access      : True
+
+       #controller_disk_type       : pd-standard
+       #controller_disk_size_gb    : 50
+       #controller_labels          :
+       #     key1 : value1
+       #     key2 : value2
+
+       #login_disk_type            : pd-standard
+       #login_disk_size_gb         : 10
+       #login_labels               :
+       #     key1 : value1
+       #     key2 : value2
+
+       #compute_disk_type          : pd-standard
+       #compute_disk_size_gb       : 10
+       #compute_labels             :
+       #     key1 : value1
+       #     key2 : value2
+
+       #nfs_apps_server            :
+       #nfs_home_server            :
+       #controller_secondary_disk          : True
+       #controller_secondary_disk_type     : pd-standard
+       #controller_secondary_disk_size_gb  : 300
+
+       # Optional GPU configuration fields
+       #gpu_type                   : nvidia-tesla-v100
+       #gpu_count                  : 8
+
+       # Optional timer fields
+       #suspend_time               : 300
+
+       #slurm_version           : 18.08-latest
+       default_users           : < GCP user email addr, comma separated >
+
    ```
 
-   **NOTE:** The version number must match the version of the link name found
-   at (https://www.schedmd.com/downloads.php).
+   **NOTE:** For a complete list of available options and their definitions,
+   check out the [schema file](slurm.jinja.schema).
 
 2. Spin up the cluster.
 
@@ -80,8 +134,8 @@ Steps:
    and viewing the new instances:
    https://console.cloud.google.com/compute/instances
 
-   To verify that the deployment scripts all worked, ssh to the login node and
-   run `sinfo` to see how many nodes have registered and in an IDLE state.
+   To verify the deployment, ssh to the login node and run `sinfo` to see how
+   many nodes have registered and are in an idle state.
 
    A message will be broadcast to the terminal when the installation is
    complete. If you log in before the installation is complete, you will either
@@ -89,12 +143,12 @@ Steps:
    (e.g. /bin/bash) to get the correct bash profile.
 
    ```
-   $ gcloud compute [--project=<project id>] ssh [--zone=<zone>] login1
+   $ gcloud compute [--project=<project id>] ssh [--zone=<zone>] g1-login1
    ...
-   [bob@login1 ~]$ sinfo
+   [bob@g1-login1 ~]$ sinfo
    PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
-   debug*       up   infinite      8  idle~ compute[3-10]
-   debug*       up   infinite      2   idle compute[1-2]
+   debug*       up   infinite      8  idle~ g1-compute[3-10]
+   debug*       up   infinite      2   idle g1-compute[1-2]
    ```
 
    **NOTE:** By default, Slurm will hide nodes that are in a power_save state --
@@ -105,11 +159,11 @@ Steps:
 4. Submit jobs on the cluster.
 
    ```
-   [bob@login1 ~]$ sbatch -N2 --wrap="srun hostname"
+   [bob@g1-login1 ~]$ sbatch -N2 --wrap="srun hostname"
    Submitted batch job 2
-   [bob@login1 ~]$ cat slurm-2.out
-   compute1
-   compute2
+   [bob@g1-login1 ~]$ cat slurm-2.out
+   g1-compute1
+   g1-compute2
    ```
 
 5. Tearing down the deployment.
@@ -122,36 +176,59 @@ Steps:
    than the ones created from the default deployment then they will need to be
    destroyed before deployment can be removed.
 
+### Image-based Scaling
+   When a deployment is created, the deployment will create a
+   <cluster_name>-compute-image instance that is a temporary compute instance
+   image. When the instance is done installing packages, it then creates a
+   image of itself and then destroys itself. Subsequent bursted compute
+   instances will use this image -- shortening the creation and boot time of
+   new compute instances. While the compute-image is running, the debug
+   partition will be marked as "down" to prevent jobs from launching until the
+   image is created. After the image is created, the partition will be put into
+   an "up" state and jobs can then run.
+
+   **NOTE:** When creating a compute image that has gpus attached, the process
+   can take about 10 minutes.
+
+   If the compute image needs to be updated, it can be done with the following
+   command:
+   ```
+   $ gcloud compute images create <cluster_name>-compute-image-$(date '+%Y-%m-%d-%H-%M-%S') \
+                                  --source-disk <instance name> \
+                                  --source-disk-zone <zone> --force \
+                                  --family <cluster_name>-compute-image-family
+   ```
+
+   Existing images can be viewed on the console's [Images](https://console.cloud.google.com/compute/images)
+   page.
+
+### Installing Custom Packages
+   There are two files: custom-controller-install, custom-compute-install in
+   the scripts directory that can be used to add custom installations for the
+   given instance type. The files will be executed during startup of the
+   instance types.
+
 ### Accessing Compute Nodes
 
    There are multiple ways to connect to the compute nodes:
    1. If the compute nodes have external IPs you can connect directly to the
-      compute nodes. From the GCP Compute Engine page, the SSH drop down next to
-      the compute instances gives severval options for connecting to the compute
-      nodes.
+      compute nodes. From the [VM Instances](https://console.cloud.google.com/compute/instances)
+      page, the SSH drop down next to the compute instances gives several
+      options for connecting to the compute nodes.
    2. Whether the compute nodes have external IPs or not, they can be connected
-      to from within the cluster. Because /home is mounted on all of the
-      instances an ssh key can be created and added to your authorized keys
-      which can then be used to access all other instances in the cluster.  
-      e.g.
-      ```
-      [bob@login1 ~]$ ssh-keygen -t rsa
-      [bob@login1 ~]$ cat .ssh/id_rsa.pub >> .ssh/authorized_keys
-      [bob@login1 ~]$ ssh compute1
-      [bob@compute1 ~]$
-      ```
+      to from within the cluster. By default, the instances are setup with
+      GCP's OSLogin.For information on managing access to instances see the
+      [OSLogin documentation](https://cloud.google.com/compute/docs/instances/managing-instance-access).
+
+      In general, you can click the "SSH" button next to the instance with an
+      external IP on the [VM Instances](https://console.cloud.google.com/compute/instances)
+      page. From this node you can ssh to compute nodes.
 
 ### Preemptible VMs
-   Currently, when a preemptible VM is preempted by GCP, Slurm will detect that
-   the node is not responding and will mark the node as down after
-   SlurmdTimeout. The node will remain in a "down" state until it is manually
-   returned to an "idle" state. Nodes can be put back into an "idle" state with
-   the command:
-   ```
-   $ scontrol update nodename=<nodename> state=idle
-   ```
-   See the [scontrol man page](https://slurm.schedmd.com/scontrol.html#OPT_SPECIFICATIONS-FOR-UPDATE-COMMAND,-NODES)
-   for more state information.
+   With preemptible_bursting on, when a node is found preempted, or stopped,
+   the slurm-gcp sync script will mark the node as "down" and will attempt to
+   restart the node. If there were any batch jobs on the preempted node, they
+   will be requeued -- interactive (e.g. srun, salloc) jobs can't be requeued.
 
 ## Bursting out from on-premise cluster
 
@@ -159,8 +236,8 @@ Bursting out from an on-premise cluster is done by configuring the
 **ResumeProgram** and the **SuspendProgram** in the slurm.conf. The scripts
 *resume.py*, *suspend.py* and *startup-script.py* in the scripts directory can
 be modified and used create new compute instances in a GCP project. See the
-[Slurm Elastic Computing](https://slurm.schedmd.com/elastic_computing.html) for more
-information.
+[Slurm Elastic Computing](https://slurm.schedmd.com/elastic_computing.html) for
+more information.
 
 ### Bursting out playground
 
@@ -180,7 +257,7 @@ following are the steps to do this.
      type: slurm.jinja
      properties:
        ...
-       cluster_name            : google1
+       cluster_name            : g1
        ...
        cidr                    : 10.10.0.0/16
        ....
@@ -199,14 +276,18 @@ following are the steps to do this.
       Name                  : slurm-subnetwork2
       Region                : choose a region
       IP address range      : 10.20.0.0/16
-      Private Google Access : Disabled
+      Private Google Access : On
+      Flow logs             : Off
       Dynamic routing mode  : Regional
+      DNS server policy     : No server policy
       ```
 
 4. Setup a gateway-to-gateway VPN.
 
    For each project, from the GCP console, create a VPN by going to
    Hybrid Connectivity->VPN->Create VPN connection.
+
+   Choose Classic VPN.
 
    Fill in the following fields:
    ```
@@ -237,7 +318,7 @@ following are the steps to do this.
    created. We need to get this account name and give it permissions in
    project2.
    1. gcloud compute ssh to controller in project1
-     * $ gcloud compute [--project=<project1>] ssh [--zone=<zone>] controller
+     * $ gcloud compute [--project=<project1>] ssh [--zone=<zone>] g1-controller
    2. Run:
       ```
       gcloud config list
@@ -249,51 +330,149 @@ following are the steps to do this.
    7. Select the **Compute Admin** and **Service Account User** roles.
    8. Click ADD
 
-6. Modify *resume.py* and *suspend.py* in the /apps/slurm/scripts directory on
-   project1's controller instance to communicate with project2.
+6. Modify *resume.py*, *slurm-gcp-sync.py* and *suspend.py* in the
+   /apps/slurm/scripts directory on project1's controller instance to
+   communicate with project2.
 
    Modify the following fields with the appropriate values:
    e.g.
    ```
-   # resume.py, suspend.py
+   # resume.py, suspend.py, slurm-gcp-sync.py
    PROJECT      = '<project2 id>'
    ZONE         = '<project2 zone>'
 
    # resume.py
-   REGSION      = '<project2 region>'
+   REGION       = '<project2 region>'
+   NETWORK      = "projects/{}/regions/{}/subnetworks/slurm-subnetwork2".format(PROJECT, REGION)"
 
-   # Set to True so that it can install packages from the other network
+   # Set to True so that it can install packages from the internet
    EXTERNAL_IP  = True
    ```
+7. By default, project1 won't be able to resolve the instances in project2.
+   here are two ways to work around this.
 
-7. Configure the instances to be able to find the controller node.
+   **DNS Peering**
 
-   Modify *startup-script.py* to put the controller's IP address in /etc/hosts.
-   You can find the controller's internal IP address by navigating to Compute
-   Engine in project1's GCP Console.
+   DNS Peering can be set up so that project1 can resolve instances in
+   project2 and vice versa.
+
+   https://cloud.google.com/dns/zones/#peering-zones
+
+   1. On project1's GCP Console, navigate to Network service->Cloud DNS
+   2. Create zone
+   3. Fill in the following fields:
+   ```
+   Zone type    : Private
+   Zone name    : project1
+   DNS Name     : <suffix on DNS zone in project2. e.g "c.<project2>.internal">
+   Options      : DNS Peering
+   Networks     : slurm-network
+   Peer project : <project2>
+   Peer network : slurm-network2
+   ```
+   4. Create
+
+   Now from project1, you should be able to resolve hostnames in project2.
+
+   e.g.
+   ```
+   [root@g1-controller ~]$ nslookup <instance>.c.<project2>.internal
+   ```
+
+   In order for Slurm to be able to reference the nodes by the short name, the
+   DNS search path of project2 needs to be added to the controller and each
+   login node's /etc/resolve.conf.
+
+   e.g.
+   ```
+   /etc/resolve.conf
+   # Generated by NetworkManager
+   search c.<project1>.internal google.internal
+   search c.<project2>.internal google.internal
+   nameserver 169.254.169.254
+   ```
+
+   The same steps can be followed to create a peering zone from project2 to
+   project1. This avoids the need to add the controller to /etc/hosts.
+
+   **NodeAddrs**
+
+   Without hostname resolution, Slurm needs the IP address' of the compute
+   nodes to communicate with them. The following configuration changes need to
+   be done for this setup:
+
+   1. cloud_dns needs to be removed from SlurmctldParameters.
+   2. Hierarchical node communications need to be disabled by setting
+      TreeWidth to 65533.
+   3. Update resume.py to notify controller of instance's IP address.
+
+   e.g.
+   ```
+   # slurm.conf
+   TreeWidth=65533
+   #SlurmctldParameters=cloud_dns,idle_on_node_suspend
+   SlurmctldParameters=idle_on_node_suspend
+
+   # resume.py
+   UPDATE_NODE_ADDRS = True
+   ```
+
+   Then restart slurmctld and all slurmd's.
+
+8. Configure the instances to be able to find the controller node.
+
+   If project2 has been set up with DNS peering back to project1, then
+   project1's DNS search path of project1 needs to be added to the compute nodes in
+   project2. Otherwise the controller's IP address can be added to instance's
+   /etc/hosts. You can find the controller's internal IP address by navigating
+   to Compute Engine in project1's GCP Console.
+
+   To do this modify *startup-script.py* (/apps/slurm/scripts/startup-script.py.
 
    e.g.
    ```
    diff --git a/scripts/startup-script.py b/scripts/startup-script.py
-   index 018c270..6103c5e 100644
+   index 4933efa..481ad4b 100644
    --- a/scripts/startup-script.py
    +++ b/scripts/startup-script.py
-   @@ -704,6 +704,12 @@ PATH=$PATH:$S_PATH/bin:$S_PATH/sbin
+   @@ -1006,6 +1006,12 @@ SELINUXTYPE=targeted
 
-    def mount_nfs_vols():
+    def main():
 
-   +    f = open('/etc/hosts', 'a')
+   +    f = open('/etc/resolv.conf', 'a')
    +    f.write("""
-   +<controller ip> controller
+   +search c.<project1>.internal google.internal
    +""")
    +    f.close()
    +
-        f = open('/etc/fstab', 'a')
-        f.write("""
-    controller:{0}    {0}     nfs      rw,sync,hard,intr  0     0
+        hostname = socket.gethostname()
+
+        setup_selinux()
    ```
 
-8. Since the scripts rely on getting the Slurm configuration and binaries
+   or
+
+   ```
+   diff --git a/scripts/startup-script.py b/scripts/startup-script.py
+   index 4933efa..a31cdf4 100644
+   --- a/scripts/startup-script.py
+   +++ b/scripts/startup-script.py
+   @@ -1006,6 +1006,12 @@ SELINUXTYPE=targeted
+
+    def main():
+
+   +    f = open('/etc/hosts', 'a')
+   +    f.write("""
+   +<controller ip> <controller hostname>
+   +""")
+   +    f.close()
+   +
+        hostname = socket.gethostname()
+
+        setup_selinux()
+   ```
+
+9. Since the scripts rely on getting the Slurm configuration and binaries
    from the shared /apps file system, the firewall on the project1 must be
    modified to allow NFS through.
 
@@ -306,7 +485,7 @@ following are the steps to do this.
       Priority             : 1000
       Direction of traffic : Ingress
       Action to match      : Allow
-      Tagets               : Specified target tags
+      Targets              : Specified target tags
       Target tags          : controller
       Source Filter        : IP ranges
       Source IP Ranges     : 0.0.0.0/0
@@ -316,29 +495,29 @@ following are the steps to do this.
       ```
    4. Click Create
 
-9. Open ports on project1 for project2 to be able to contact the slurmctld
-   (tcp:6817) and the slurmdbd (tcp:6819) on project1.
+10. Open ports on project1 for project2 to be able to contact the slurmctld
+    (tcp:6819-6830) and the slurmdbd (tcp:6819) on project1.
 
-   1. On project1's GCP Console, navigate to VPC network->Firewall rules
-   2. Click CREATE FIREWALL RULE at the top of the page.
-   3. Fill in the following fields:
-      ```
-      Name                 : slurm
-      Network              : slurm-network
-      Priority             : 1000
-      Direction of traffic : Ingress
-      Action to match      : Allow
-      Tagets               : Specified target tags
-      Target tags          : controller
-      Source Filter        : IP ranges
-      Source IP Ranges     : 0.0.0.0/0
-      Second source filter : none
-      Protocols and ports  : Specified protocols and ports
-      tcp:6817,6819
-      ```
-   4. Click Create
+    1. On project1's GCP Console, navigate to VPC network->Firewall rules
+    2. Click CREATE FIREWALL RULE at the top of the page.
+    3. Fill in the following fields:
+       ```
+       Name                 : slurm
+       Network              : slurm-network
+       Priority             : 1000
+       Direction of traffic : Ingress
+       Action to match      : Allow
+       Targets              : Specified target tags
+       Target tags          : controller
+       Source Filter        : IP ranges
+       Source IP Ranges     : 0.0.0.0/0
+       Second source filter : none
+       Protocols and ports  : Specified protocols and ports
+       tcp:6819-6830
+       ```
+    4. Click Create
 
-10. Open ports on project2 for project1 to be able to contact the slurmd's
+11. Open ports on project2 for project1 to be able to contact the slurmd's
     (tcp:6818) in project2.
 
     1. On project2's GCP Console, navigate to VPC network->Firewall rules
@@ -350,7 +529,7 @@ following are the steps to do this.
        Priority             : 1000
        Direction of traffic : Ingress
        Action to match      : Allow
-       Tagets               : Specified target tags
+       Targets              : Specified target tags
        Target tags          : compute
        Source Filter        : IP ranges
        Source IP Ranges     : 0.0.0.0/0
@@ -360,7 +539,7 @@ following are the steps to do this.
        ```
     4. Click Create
 
-11. If you plan to use srun to submit jobs from the login nodes to the compute
+12. If you plan to use srun to submit jobs from the login nodes to the compute
     nodes in project2, then ports need to be opened up for the compute nodes to
     be able to talk back to the login nodes. srun open's several ephemeral ports
     for communications. It's recommended to define which ports srun can use when
@@ -383,7 +562,7 @@ following are the steps to do this.
        Priority             : 1000
        Direction of traffic : Ingress
        Action to match      : Allow
-       Tagets               : All instances in the network
+       Targets              : All instances in the network
        Source Filter        : IP ranges
        Source IP Ranges     : 0.0.0.0/0
        Second source filter : none
@@ -392,10 +571,38 @@ following are the steps to do this.
        ```
     4. Click Create
 
-12. Slurm should now be able to burst out into project2.
+13. Slurm should now be able to burst out into project2.
 
-## Mutli-Cluster / Federation
-Slurm allows you to use a central SlurmdDBD for multiple clusters. By doing this
+14. Image-based nodes on project2.
+
+    Because deployment manager created an image in the project1, project2 will
+    install from scratch for every bursted-out compute node. In order to create
+    a base image for bursting, the following can be done.
+
+    e.g.
+    From the controller:
+    ```
+    [root@g1-controller scripts]# sudo su - slurm
+    [slurm@g1-controller ~]$ cd /apps/slurm/scripts/
+    [slurm@g1-controller scripts]$ ./resume.py proj2-compute-image
+
+    # Wait until the instance is fully installed. You can verify this by ssh'ing to
+    # the instance and verify that there are no messages about installing in the
+    # motd.
+
+    [slurm@g1-controller scripts]$ gcloud compute images create <cluster_name>-compute-image-$(date '+%Y-%m-%d-%H-%M-%S') \
+                                                                --source-disk proj2-compute-image \
+                                                                --source-disk-zone <zone> --force \
+                                                                --family <cluster_name>-compute-image-family \
+                                                                --project <project2>
+
+    # Then either stop or delete the proj2-compute-image instance.
+    ```
+
+    Once the image is created, EXTERNAL_IP can be set to False in resume.py.
+
+## Multi-Cluster / Federation
+Slurm allows you to use a central SlurmDBD for multiple clusters. By doing this
 it also allows the clusters to be able to communicate with each other. This is
 done by the client commands first checking with the SlurmDBD for the requested
 cluster's IP address and port which the client can then communicate directly
@@ -420,10 +627,10 @@ space (e.g. same uids across all the clusters).
 
 1. Create another project in GCP (e.g. project3) and create another Slurm
    cluster using the deployment scripts -- except with a different cluster name
-   (e.g. google2) and possible IP range.
+   (e.g. g2) and possible IP range.
 
 2. Open ports on project1 so that project3 can communicate with project1's
-   slurmctld (tcp:6817) and slurmdbd (tcp:6819).
+   slurmctld (tcp:6820) and slurmdbd (tcp:6819).
 
    1. On project1's GCP Console, navigate to VPC network->Firewall rules
    2. Click CREATE FIREWALL RULE at the top of the page.
@@ -434,17 +641,17 @@ space (e.g. same uids across all the clusters).
       Priority             : 1000
       Direction of traffic : Ingress
       Action to match      : Allow
-      Tagets               : Specified target tags
+      Targets              : Specified target tags
       Target tags          : controller
       Source Filter        : IP ranges
       Source IP Ranges     : 0.0.0.0/0
       Second source filter : none
       Protocols and ports  : Specified protocols and ports
-      tcp:6817,6819
+      tcp:6820,6819
       ```
    4. Click Create
 
-3. In project3 open up ports for slurmctld (tcp:6817) so that project1 can
+3. In project3 open up ports for slurmctld (tcp:6820) so that project1 can
    communicate with project3's slurmctld.
    1. On project3's GCP Console, navigate to VPC network->Firewall rules
    2. Click CREATE FIREWALL RULE at the top of the page.
@@ -455,13 +662,13 @@ space (e.g. same uids across all the clusters).
       Priority             : 1000
       Direction of traffic : Ingress
       Action to match      : Allow
-      Tagets               : Specified target tags
+      Targets              : Specified target tags
       Target tags          : controller
       Source Filter        : IP ranges
       Source IP Ranges     : 0.0.0.0/0
       Second source filter : none
       Protocols and ports  : Specified protocols and ports
-      tcp:6817
+      tcp:6820
       ```
    4. Click Create
 
@@ -494,7 +701,7 @@ space (e.g. same uids across all the clusters).
       Priority             : 1000
       Direction of traffic : Ingress
       Action to match      : Allow
-      Tagets               : Specified target tags
+      Targets              : Specified target tags
       Target tags          : compute
       Source Filter        : IP ranges
       Source IP Ranges     : 0.0.0.0/0
@@ -514,7 +721,7 @@ space (e.g. same uids across all the clusters).
       Priority             : 1000
       Direction of traffic : Ingress
       Action to match      : Allow
-      Tagets               : All instances in the network
+      Targets              : All instances in the network
       Source Filter        : IP ranges
       Source IP Ranges     : 0.0.0.0/0
       Second source filter : none
@@ -535,10 +742,10 @@ space (e.g. same uids across all the clusters).
 
    e.g.
    ```
-   $ sacctmgr add cluster google2
+   $ sacctmgr add cluster g2
    ```
 
-7. Add user and account associations to the google2 cluster.
+7. Add user and account associations to the g2 cluster.
 
    In order for a user to run a job on a cluster, the user must have an
    association on the given cluster.
@@ -561,43 +768,43 @@ space (e.g. same uids across all the clusters).
 
    * When the slurmctld registers with the slurmdbd, the slurmdbd records the
      IP address the slurmctld registered with. This then allows project1 to
-     communicate with project3 and vise versa.
+     communicate with project3 and vice versa.
 
    e.g.
    ```
    $ sacctmgr show clusters format=cluster,controlhost,controlport
       Cluster     ControlHost  ControlPort
    ---------- --------------- ------------
-      google1 ###.###.###.###         6817
-      google2 ###.###.###.###         6817
+           g1 ###.###.###.###         6820
+           g2 ###.###.###.###         6820
    ```
 10. Now you can communicate with each cluster from the other side.
 
     e.g.
     ```
-    [bob@login1 ~]$ sinfo -Mgoogle1,google2
-    CLUSTER: google1
+    [bob@login1 ~]$ sinfo -Mg1,g2
+    CLUSTER: g1
     PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
-    debug*       up   infinite      8  idle~ compute[3-10]
-    debug*       up   infinite      2   idle compute[1-2]
+    debug*       up   infinite      8  idle~ g1-compute[3-10]
+    debug*       up   infinite      2   idle g1-compute[1-2]
 
-    CLUSTER: google2
+    CLUSTER: g2
     PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
-    debug*       up   infinite      8  idle~ compute[3-10]
-    debug*       up   infinite      2   idle compute[1-2]
+    debug*       up   infinite      8  idle~ g2-compute[3-10]
+    debug*       up   infinite      2   idle g2-compute[1-2]
 
-    [bob@login1 ~]$ sbatch -Mgoogle1 --wrap="srun hostname; sleep 300"
-    Submitted batch job 17 on cluster google1
+    [bob@login1 ~]$ sbatch -Mg1 --wrap="srun hostname; sleep 300"
+    Submitted batch job 17 on cluster g1
 
-    [bob@login1 ~]$ sbatch -Mgoogle2 --wrap="srun hostname; sleep 300"
-    Submitted batch job 8 on cluster google2
+    [bob@login1 ~]$ sbatch -Mg2 --wrap="srun hostname; sleep 300"
+    Submitted batch job 8 on cluster g2
 
-    [bob@login1 ~]$ squeue -Mgoogle1,google2
-    CLUSTER: google1
+    [bob@login1 ~]$ squeue -Mg1,g2
+    CLUSTER: g1
                  JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
-                    17     debug     wrap      bob  R       0:31      1 compute1
+                    17     debug     wrap      bob  R       0:31      1 g1-compute1
 
-    CLUSTER: google2
+    CLUSTER: g2
                  JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
-                     8     debug     wrap      bob  R       0:12      1 compute1
+                     8     debug     wrap      bob  R       0:12      1 g2-compute1
     ```
